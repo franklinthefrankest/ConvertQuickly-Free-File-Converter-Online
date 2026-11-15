@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QuickConvert: Free Browser-Based File Converter</title>
+<meta name="description" content="Convert audio, documents and images privately in your browser. Nothing is uploaded.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
+<style>
+  :root{--bg:#0d1320;--panel:#161e30;--line:#2b3750;--text:#eef2fa;--muted:#9aa7c0;--accent:#ffc83d}
+  body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',system-ui,sans-serif}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px}
+  .drop{border:2px dashed #3d4c6e;border-radius:18px;transition:.15s}
+  .drop.over{border-color:var(--accent);background:#1b2540}
+  .btn{background:var(--accent);color:#1a1300;font-weight:700;border-radius:10px;padding:.6rem 1rem}
+  .btn:hover{filter:brightness(1.08)}.btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn2{border:1px solid var(--line);border-radius:10px;padding:.5rem .9rem;color:var(--text)}
+  .btn2:hover{border-color:var(--accent)}
+  select,input[type=number]{background:#0d1320;border:1px solid var(--line);border-radius:8px;padding:.4rem .6rem;color:var(--text)}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .bar{height:6px;background:#0d1320;border-radius:99px;overflow:hidden}
+  .bar>i{display:block;height:100%;background:var(--accent);width:0;transition:width .25s}
+  .badge{font-size:.72rem;font-weight:700;padding:.15rem .55rem;border-radius:99px}
+  .Pending{background:#2b3750;color:#cfd8ea}.Converting{background:#3a3010;color:var(--accent)}
+  .Success{background:#12372a;color:#5ee9a8}.Error{background:#43191f;color:#ff8a98}
+  .ad{display:flex;justify-content:center;align-items:center;min-height:50px;overflow:hidden}
+  @media (min-width:768px){.ad{min-height:90px}}
+  .Converting .dot{animation:p 1s infinite}@keyframes p{50%{opacity:.3}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body class="min-h-screen">
+<div class="max-w-3xl mx-auto px-4 py-6">
+
+  <!-- TOP AD SLOT: 728x90 desktop / 320x50 mobile -->
+  <div class="ad mb-6" aria-label="Advertisement">
+    <ins class="adsbygoogle" data-ad-client="ca-pub-XXXXXXXXXXXXXXXX" data-ad-slot="0000000001"></ins>
+  </div>
+
+  <header class="mb-6">
+    <h1 class="text-3xl sm:text-4xl font-bold">QuickConvert</h1>
+    <p class="mt-1" style="color:var(--muted)">Free file converter that runs in your browser. Your files never leave your device.</p>
+  </header>
+
+  <div id="drop" class="drop p-8 sm:p-12 text-center cursor-pointer" tabindex="0" role="button" aria-label="Choose files to convert">
+    <p class="text-xl font-medium">Drop files here, or click to browse</p>
+    <p class="mt-2 text-sm" style="color:var(--muted)">Images: PNG, JPG, WebP · Data: CSV, JSON, Markdown, TXT, HTML · Audio: MP3, WAV, M4A</p>
+    <input id="file" type="file" multiple class="hidden"
+      accept=".mp3,.m4a,.wav,.txt,.html,.htm,.csv,.json,.md,.markdown,.png,.jpg,.jpeg,.webp">
+  </div>
+
+  <section class="panel p-4 mt-4" aria-label="Image settings">
+    <h2 class="font-medium mb-2">Image resize &amp; compress</h2>
+    <div class="flex flex-wrap gap-4 items-center text-sm">
+      <label class="flex items-center gap-2">Quality <input id="q" type="range" min="10" max="100" value="85"> <output id="qv">85</output>%</label>
+      <label class="flex items-center gap-2">Max width <input id="mw" type="number" min="0" placeholder="original" class="w-28"> px</label>
+    </div>
+  </section>
+
+  <section class="mt-6" aria-label="Queue">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-lg font-medium">Queue <span id="count" style="color:var(--muted)"></span></h2>
+      <div class="flex gap-2">
+        <button id="all" class="btn" disabled>Convert all</button>
+        <button id="clear" class="btn2" disabled>Clear</button>
+      </div>
+    </div>
+    <ul id="list" class="space-y-3"></ul>
+    <p id="empty" class="text-center py-8" style="color:var(--muted)">No files yet. Add some above to see conversion options.</p>
+  </section>
+
+  <!-- BOTTOM AD SLOT: directly below the conversion output -->
+  <div class="ad mt-6" aria-label="Advertisement">
+    <ins class="adsbygoogle" data-ad-client="ca-pub-XXXXXXXXXXXXXXXX" data-ad-slot="0000000002"></ins>
+  </div>
+
+  <p class="text-xs mt-6" style="color:var(--muted)">Notes: HTML to PDF exports the page text (layout and images are not kept). M4A output depends on browser support and is encoded in real time. Everything is processed on your device.</p>
+</div>
+
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+const esc = s => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const AUDIO = ['mp3','m4a','wav'], IMG = ['png','jpg','jpeg','webp'];
+const TARGETS = {
+  mp3:['wav','mp3','m4a'], m4a:['mp3','wav'], wav:['mp3','m4a'],
+  txt:['pdf'], html:['pdf'], htm:['pdf'], csv:['json'], json:['csv'], md:['html'], markdown:['html'],
+  png:['jpg','webp','png'], jpg:['webp','png','jpg'], jpeg:['webp','png','jpg'], webp:['jpg','png','webp']
+};
+const MIME = {wav:'audio/wav',mp3:'audio/mpeg',m4a:'audio/mp4',pdf:'application/pdf',json:'application/json',
+  html:'text/html',csv:'text/csv',jpg:'image/jpeg',png:'image/png',webp:'image/webp'};
+const queue = []; let uid = 0;
+
+const ext = n => (n.split('.').pop() || '').toLowerCase();
+const size = b => b > 1e6 ? (b/1e6).toFixed(1)+' MB' : Math.max(1,Math.round(b/1e3))+' KB';
+const tick = () => new Promise(r => setTimeout(r, 0));
+
+/* ---------- UI ---------- */
+function addFiles(files) {
+  for (const f of files) {
+    const e = ext(f.name);
+    const item = {id:++uid, file:f, ext:e, status:'Pending', pct:0, msg:'Waiting', blob:null, err:'',
+      target:(TARGETS[e]||[])[0]};
+    if (!TARGETS[e]) { item.status='Error'; item.err='Unsupported file type: .'+e; }
+    queue.push(item);
+    const li = document.createElement('li'); li.id='i'+item.id; li.className='panel p-4';
+    $('#list').appendChild(li); draw(item);
+  }
+  sync();
+}
+function draw(it) {
+  const li = $('#i'+it.id); if (!li) return;
+  const opts = (TARGETS[it.ext]||[]).map(t =>
+    `<option value="${t}" ${t===it.target?'selected':''}>${t===it.ext||(t==='jpg'&&it.ext==='jpeg')?t.toUpperCase()+' (resize/compress)':t.toUpperCase()}</option>`).join('');
+  const busy = it.status==='Converting';
+  li.innerHTML = `
+   <div class="flex flex-wrap items-center gap-3 justify-between">
+     <div class="min-w-0">
+       <p class="font-medium truncate" title="${esc(it.file.name)}">${esc(it.file.name)}</p>
+       <p class="text-xs" style="color:var(--muted)">${it.ext.toUpperCase()} · ${size(it.file.size)}</p>
+     </div>
+     <span class="badge ${it.status}">${it.status==='Converting'?'<span class="dot">●</span> ':''}${it.status}</span>
+   </div>
+   ${TARGETS[it.ext] ? `<div class="flex flex-wrap items-center gap-2 mt-3">
+     <label class="text-sm" style="color:var(--muted)" for="t${it.id}">Convert to</label>
+     <select id="t${it.id}" data-id="${it.id}" ${busy?'disabled':''}>${opts}</select>
+     <button class="btn2" data-go="${it.id}" ${busy?'disabled':''}>${it.status==='Success'?'Convert again':'Convert'}</button>
+     ${it.blob?`<button class="btn" data-dl="${it.id}">Download Converted File</button>`:''}
+     <button class="btn2 ml-auto" data-rm="${it.id}" aria-label="Remove ${esc(it.file.name)}" ${busy?'disabled':''}>Remove</button>
+   </div>` : `<div class="mt-3"><button class="btn2" data-rm="${it.id}">Remove</button></div>`}
+   ${it.status==='Converting'||it.status==='Success' ? `<div class="mt-3"><div class="bar" role="progressbar" aria-valuenow="${it.pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${it.pct}%"></i></div>
+     <p class="text-xs mt-1" style="color:var(--muted)" aria-live="polite">${esc(it.msg)}</p></div>` : ''}
+   ${it.status==='Error' ? `<p class="text-sm mt-3" style="color:#ff8a98">${esc(it.err)}</p>` : ''}`;
+}
+function sync() {
+  $('#empty').style.display = queue.length ? 'none' : 'block';
+  $('#count').textContent = queue.length ? `(${queue.length})` : '';
+  const ready = queue.some(i => TARGETS[i.ext] && i.status!=='Converting');
+  $('#all').disabled = !ready; $('#clear').disabled = !queue.length;
+}
+function prog(it, pct, msg) { it.pct = pct; it.msg = msg; draw(it); }
+
+/* ---------- Conversion ---------- */
+async function run(it) {
+  it.status='Converting'; it.blob=null; it.err=''; prog(it,5,'Reading file...'); await tick();
+  try {
+    const t = it.target, e = it.ext;
+    let blob;
+    if (AUDIO.includes(e)) blob = await audio(it, t);
+    else if (IMG.includes(e)) blob = await image(it, t);
+    else if (e==='csv') blob = await csv(it);
+    else if (e==='json') blob = await jsonToCsv(it);
+    else if (e==='md' || e==='markdown') blob = await md(it);
+    else blob = await pdf(it);
+    it.blob = blob; it.status='Success'; prog(it,100,'Done! Ready to download.');
+  } catch (err) {
+    console.error(err); it.status='Error'; it.err = err.message || 'Conversion failed.'; draw(it);
+  }
+  sync();
+}
+
+/* Images */
+async function image(it, t) {
+  const bmp = await createImageBitmap(it.file);
+  prog(it,35,'Converting...');
+  const mw = parseInt($('#mw').value,10);
+  const k = mw > 0 && bmp.width > mw ? mw / bmp.width : 1;
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.width*k); c.height = Math.round(bmp.height*k);
+  const g = c.getContext('2d');
+  if (t==='jpg') { g.fillStyle='#fff'; g.fillRect(0,0,c.width,c.height); }
+  g.drawImage(bmp,0,0,c.width,c.height); prog(it,70,'Converting...');
+  const q = $('#q').value/100;
+  const b = await new Promise(r => c.toBlob(r, MIME[t], q));
+  if (!b || b.type !== MIME[t]) throw new Error(t.toUpperCase()+' export is not supported by this browser.');
+  return b;
+}
+
+/* CSV -> JSON */
+function parseCSV(s) {
+  const rows=[]; let r=[], f='', q=false;
+  s = s.replace(/^\uFEFF/,'');
+  for (let i=0;i<s.length;i++){
+    const ch=s[i];
+    if (q) { if (ch==='"') { if (s[i+1]==='"'){f+='"';i++} else q=false } else f+=ch }
+    else if (ch==='"') q=true;
+    else if (ch===','||ch===';'||ch==='\t') { r.push(f); f='' }
+    else if (ch==='\n'||ch==='\r') { if (ch==='\r'&&s[i+1]==='\n') i++; r.push(f); rows.push(r); r=[]; f='' }
+    else f+=ch;
+  }
+  if (f!==''||r.length){ r.push(f); rows.push(r) }
+  return rows.filter(x => x.some(v => v.trim()!==''));
+}
+async function csv(it) {
+  const text = await it.file.text(); prog(it,50,'Converting...');
+  const rows = parseCSV(text);
+  if (!rows.length) throw new Error('The CSV file is empty.');
+  const head = rows[0].map((h,i) => h.trim() || 'column'+(i+1));
+  const out = rows.slice(1).map(r => Object.fromEntries(head.map((h,i) => [h, r[i] ?? ''])));
+  return new Blob([JSON.stringify(out,null,2)], {type:MIME.json});
+}
+
+/* JSON -> CSV */
+async function jsonToCsv(it) {
+  let data; try { data = JSON.parse(await it.file.text()); } catch { throw new Error('This file is not valid JSON.'); }
+  prog(it,50,'Converting...');
+  if (!Array.isArray(data)) data = [data];
+  if (!data.length) throw new Error('The JSON array is empty.');
+  const flat = data.map(r => r !== null && typeof r === 'object' && !Array.isArray(r) ? r : {value:r});
+  const keys = [...new Set(flat.flatMap(r => Object.keys(r)))];
+  const cell = v => { if (v==null) return ''; if (typeof v==='object') v = JSON.stringify(v); v = String(v); return /[",\n\r]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v };
+  const out = [keys.map(cell).join(','), ...flat.map(r => keys.map(k => cell(r[k])).join(','))].join('\r\n');
+  return new Blob(['\uFEFF'+out], {type:MIME.csv});
+}
+
+/* Markdown -> HTML */
+async function md(it) {
+  if (!window.marked) throw new Error('Markdown library failed to load. Check your connection.');
+  const body = marked.parse(await it.file.text()); prog(it,60,'Converting...');
+  const title = esc(it.file.name.replace(/\.[^.]+$/,''));
+  const html = `<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>\n<style>body{font:16px/1.6 system-ui,sans-serif;max-width:760px;margin:2rem auto;padding:0 1rem;color:#222}pre,code{background:#f3f3f3;border-radius:4px}pre{padding:.8rem;overflow:auto}code{padding:.1rem .3rem}blockquote{border-left:4px solid #ddd;margin-left:0;padding-left:1rem;color:#555}img{max-width:100%}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:.3rem .6rem}</style></head>\n<body>\n${body}\n</body></html>`;
+  return new Blob([html], {type:MIME.html});
+}
+
+/* TXT / HTML -> PDF */
+async function pdf(it) {
+  if (!window.jspdf) throw new Error('PDF library failed to load. Check your connection.');
+  let text = await it.file.text();
+  if (it.ext==='html' || it.ext==='htm') {
+    const d = new DOMParser().parseFromString(text,'text/html');
+    d.querySelectorAll('script,style,noscript').forEach(n => n.remove());
+    d.querySelectorAll('br,p,div,li,tr,h1,h2,h3,h4,h5,h6,pre,blockquote').forEach(n => n.append('\n'));
+    text = (d.body.textContent || '').replace(/\n{3,}/g,'\n\n').trim();
+  }
+  prog(it,50,'Converting...'); await tick();
+  const doc = new jspdf.jsPDF({unit:'pt', format:'a4'});
+  const m=56, W=doc.internal.pageSize.getWidth()-m*2, H=doc.internal.pageSize.getHeight()-m;
+  doc.setFont('helvetica','normal'); doc.setFontSize(11);
+  const lines = doc.splitTextToSize(text.replace(/\t/g,'    ') || ' ', W);
+  let y = m;
+  lines.forEach((l,i) => {
+    if (y > H) { doc.addPage(); y = m }
+    doc.text(l, m, y); y += 15;
+    if (i % 400 === 0) prog(it, 50 + Math.round(45*i/lines.length), 'Converting...');
+  });
+  return doc.output('blob');
+}
+
+/* Audio */
+function wavBlob(buf) {
+  const ch = Math.min(buf.numberOfChannels,2), n = buf.length, rate = buf.sampleRate;
+  const ab = new ArrayBuffer(44 + n*ch*2), v = new DataView(ab);
+  const w = (o,s) => [...s].forEach((c,i) => v.setUint8(o+i,c.charCodeAt(0)));
+  w(0,'RIFF'); v.setUint32(4,36+n*ch*2,true); w(8,'WAVEfmt '); v.setUint32(16,16,true);
+  v.setUint16(20,1,true); v.setUint16(22,ch,true); v.setUint32(24,rate,true);
+  v.setUint32(28,rate*ch*2,true); v.setUint16(32,ch*2,true); v.setUint16(34,16,true);
+  w(36,'data'); v.setUint32(40,n*ch*2,true);
+  const d = [...Array(ch)].map((_,i) => buf.getChannelData(i)); let o = 44;
+  for (let i=0;i<n;i++) for (let c=0;c<ch;c++){ const s=Math.max(-1,Math.min(1,d[c][i])); v.setInt16(o,s<0?s*0x8000:s*0x7fff,true); o+=2 }
+  return new Blob([ab],{type:MIME.wav});
+}
+async function mp3Blob(it, buf) {
+  if (!window.lamejs) throw new Error('MP3 encoder failed to load. Check your connection.');
+  const ch = Math.min(buf.numberOfChannels,2), enc = new lamejs.Mp3Encoder(ch, buf.sampleRate, 128);
+  const pcm = c => { const f=buf.getChannelData(c), o=new Int16Array(f.length);
+    for (let i=0;i<f.length;i++){ const s=Math.max(-1,Math.min(1,f[i])); o[i]=s<0?s*0x8000:s*0x7fff } return o };
+  const L = pcm(0), R = ch>1 ? pcm(1) : null, parts = [], S = 1152;
+  for (let i=0;i<L.length;i+=S) {
+    const b = ch>1 ? enc.encodeBuffer(L.subarray(i,i+S), R.subarray(i,i+S)) : enc.encodeBuffer(L.subarray(i,i+S));
+    if (b.length) parts.push(new Uint8Array(b));
+    if ((i/S)%200===0) { prog(it, 40+Math.round(55*i/L.length), 'Converting...'); await tick(); }
+  }
+  const end = enc.flush(); if (end.length) parts.push(new Uint8Array(end));
+  return new Blob(parts,{type:MIME.mp3});
+}
+async function m4aBlob(it, buf) {
+  if (!window.MediaRecorder || !MediaRecorder.isTypeSupported('audio/mp4'))
+    throw new Error('This browser cannot encode M4A. Try Safari or a recent Chrome, or choose MP3 or WAV.');
+  const ctx = new AudioContext(), dest = ctx.createMediaStreamDestination();
+  const src = ctx.createBufferSource(); src.buffer = buf; src.connect(dest);
+  const rec = new MediaRecorder(dest.stream,{mimeType:'audio/mp4'}), chunks = [];
+  rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+  const done = new Promise(r => rec.onstop = r);
+  rec.start(); src.start(); const t0 = performance.now();
+  const iv = setInterval(() => prog(it, 40+Math.min(55,Math.round(55*(performance.now()-t0)/1000/buf.duration)), 'Converting (real time)...'), 400);
+  await new Promise(r => src.onended = r); rec.stop(); await done; clearInterval(iv); ctx.close();
+  return new Blob(chunks,{type:MIME.m4a});
+}
+async function audio(it, t) {
+  const AC = window.AudioContext || window.webkitAudioContext, ctx = new AC();
+  let buf;
+  try { buf = await ctx.decodeAudioData(await it.file.arrayBuffer()); }
+  catch { throw new Error('Could not decode this audio file. It may be corrupt or use an unsupported codec.'); }
+  finally { ctx.close(); }
+  prog(it,30,'Converting...'); await tick();
+  if (t==='wav') return wavBlob(buf);
+  if (t==='mp3') return mp3Blob(it, buf);
+  return m4aBlob(it, buf);
+}
+
+/* ---------- Events ---------- */
+const drop = $('#drop'), input = $('#file');
+drop.onclick = () => input.click();
+drop.onkeydown = e => (e.key==='Enter'||e.key===' ') && (e.preventDefault(), input.click());
+input.onchange = () => { addFiles(input.files); input.value=''; };
+['dragenter','dragover'].forEach(n => drop.addEventListener(n, e => { e.preventDefault(); drop.classList.add('over') }));
+['dragleave','drop'].forEach(n => drop.addEventListener(n, e => { e.preventDefault(); drop.classList.remove('over') }));
+drop.addEventListener('drop', e => addFiles(e.dataTransfer.files));
+$('#q').oninput = e => $('#qv').textContent = e.target.value;
+
+$('#list').addEventListener('change', e => {
+  const it = queue.find(i => i.id == e.target.dataset.id); if (it) { it.target = e.target.value; it.blob=null; if (it.status==='Success') { it.status='Pending'; draw(it) } }
+});
+$('#list').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const find = k => queue.find(i => i.id == b.dataset[k]);
+  if (b.dataset.go) run(find('go'));
+  else if (b.dataset.rm) { const it = find('rm'); queue.splice(queue.indexOf(it),1); $('#i'+it.id).remove(); sync(); }
+  else if (b.dataset.dl) {
+    const it = find('dl'), base = it.file.name.replace(/\.[^.]+$/,'');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(it.blob);
+    a.download = `${base}.${it.target}`; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+});
+$('#all').onclick = async () => {
+  $('#all').disabled = true;
+  for (const it of queue.filter(i => TARGETS[i.ext] && i.status!=='Success')) await run(it);
+  sync();
+};
+$('#clear').onclick = () => { queue.length = 0; $('#list').innerHTML=''; sync(); };
+sync();
+
+/* AdSense: size slots 728x90 (desktop) or 320x50 (mobile), then request ads */
+const wide = matchMedia('(min-width:768px)').matches;
+document.querySelectorAll('ins.adsbygoogle').forEach(el => {
+  el.style.display = 'inline-block'; el.style.width = wide ? '728px' : '320px'; el.style.height = wide ? '90px' : '50px';
+  try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch (e) {}
+});
+})();
+</script>
+</body>
+</html>
